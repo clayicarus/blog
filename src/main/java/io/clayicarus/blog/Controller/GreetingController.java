@@ -11,7 +11,7 @@ public class GreetingController {
     public String greeting(@RequestParam(name = "user", required = false, defaultValue = "world") String name,
                            Model model)
     {
-        model.addAttribute("name", name);
-        return "greeting";
+        model.addAttribute("name", name);   // add to html ${name}
+        return "index";
     }
 }

@@ -1,21 +1,32 @@
-package io.clayicarus.blog.Controller.GithubAPI;
+package io.clayicarus.blog.Controller;
 
 import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
+import io.clayicarus.blog.Controller.GithubAPI.GithubUser;
+import io.clayicarus.blog.Controller.GithubAPI.TokenGetter;
+import io.clayicarus.blog.Controller.GithubAPI.TokenPackage;
+import io.clayicarus.blog.DataBase.DB_User;
+import io.clayicarus.blog.Mapper.UserMapper;
 import okhttp3.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.SocketAddress;
+import java.util.UUID;
 
 @Controller
 public class GithubAuthorizeController {
 
     @GetMapping("/callback")    // step2: redirect back to /callback
     String callback(@RequestParam(name = "code") String code,
-                    @RequestParam(name = "state") String state)
+                    @RequestParam(name = "state") String state,
+                    HttpServletRequest request)
     {
         // TODO: if state not match
         // POST https://github.com/login/oauth/access_token to get token
@@ -26,8 +37,22 @@ public class GithubAuthorizeController {
         tg.setClient_id(client_id);
         tg.setClient_secret(client_secret);
         String token = getAccessToken(tg); // POST
-        getUser(token); // step3
-        return "index";
+        GithubUser githubUser = getUser(token);// step3
+        if(githubUser != null) {
+            // login success
+            DB_User user = new DB_User();
+            user.setToken(UUID.randomUUID().toString());
+            user.setName(githubUser.getName());
+            user.setAccountId(String.valueOf(githubUser.getId()));
+            user.setGmtCreate(System.currentTimeMillis());
+            user.setGmtModified(user.getGmtCreate());
+            userMapper.insert(user);
+            request.getSession().setAttribute("user", githubUser);
+            return "redirect:/";
+        } else {
+            // login failed
+            return "redirect:/";
+        }
     }
 
     private String getAccessToken(TokenGetter getter)
@@ -35,6 +60,7 @@ public class GithubAuthorizeController {
         MediaType json
                 = MediaType.get("application/json; charset=utf-8");
         OkHttpClient client = new OkHttpClient();
+
         String sg = JSON.toJSONString(getter);
         RequestBody body = RequestBody.create(json, sg);
         System.out.println(sg);
@@ -80,10 +106,14 @@ public class GithubAuthorizeController {
         return null;
     }
 
-    @Value("${github.client_id}")
+    @Autowired  // auto import class
+    private UserMapper userMapper;
+
+    @Value("${github.client_id}")   // @Value() is to read value from application.properties
     private String client_id;
     @Value("${github.client_secret}")
     private String client_secret;
     @Value("${github.redirect_uri}")
     private String redirect_uri;
+
 }
